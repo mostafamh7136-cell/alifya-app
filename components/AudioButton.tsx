@@ -6,6 +6,7 @@ const cacheKey=(text:string)=>`alifya:human-audio:${text.trim()}`;
 const audioCandidates=(text:string)=>Array.from(new Set([text.trim(),text.trim().normalize("NFKC").replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g,""),text.trim().replace(/[.,!?؟،؛:]/g,"")].filter(Boolean)));
 
 async function findHumanAudio(text:string):Promise<string|null>{
+ const exact=HUMAN_AUDIO[normalize(text)]; if(exact) return exact;
  for(const candidate of audioCandidates(text)){
   const cached=window.sessionStorage.getItem(cacheKey(candidate));
   if(cached) return cached==="none"?null:cached;
@@ -32,7 +33,7 @@ export default function AudioButton({text,lang="ar",label,compact=false}:Props){
   setError(false); setBusy(true);
   try{
    let src=lang==="ar"?await findHumanAudio(text):null;
-   if(src){setHuman(true);if(!audioRef.current||audioRef.current.src!==src){audioRef.current=new Audio(src);audioRef.current.preload="auto";audioRef.current.onended=()=>setBusy(false);}audioRef.current.currentTime=0;await audioRef.current.play();return;}
+   if(src){setHuman(src.includes("wikimedia.org")||src.includes("lingualibre.org"));if(!audioRef.current||audioRef.current.src!==src){audioRef.current?.pause();audioRef.current=new Audio(src);audioRef.current.preload="auto";audioRef.current.onended=()=>setBusy(false);audioRef.current.onerror=()=>{setBusy(false);setError(true)};}audioRef.current.currentTime=0;await audioRef.current.play();return;}
    setHuman(false);
    if("speechSynthesis" in window){window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang=lang==="ar"?"ar-EG":"en-US";u.rate=lang==="ar"?.86:.92;u.onend=()=>setBusy(false);u.onerror=()=>{setBusy(false);setError(true)};window.speechSynthesis.speak(u);return;}
    setBusy(false);setError(true);
