@@ -1,126 +1,17 @@
-// Alifya — client-side progress tracking (localStorage)
-
-export type QuizResult = {
-  lessonId: string;
-  score: number;
-  total: number;
-  date: string;
-};
-
-export type LessonProgress = {
-  completed: boolean;
-  completedAt?: string;
-  bestScore?: number;
-  attempts: number;
-  lastQuiz?: QuizResult;
-};
-
-export type ProgressState = {
-  lessons: Record<string, LessonProgress>;
-  xp: number;
-  streak: number;
-  lastActiveDay?: string;
-};
-
-const STORAGE_KEY = "alifya-progress-v1";
-const defaultProgress: ProgressState = { lessons: {}, xp: 0, streak: 0 };
-
-type ProgressUpdatedEvent = Event & { detail?: ProgressState };
-
-function todayKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function emitProgressUpdated(state: ProgressState) {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent<ProgressState>("alifya:progress-updated", { detail: state }));
-}
-
-export function loadProgress(): ProgressState {
-  if (typeof window === "undefined") return defaultProgress;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultProgress;
-    const parsed = JSON.parse(raw) as Partial<ProgressState>;
-    return {
-      lessons: parsed.lessons ?? {},
-      xp: Number.isFinite(parsed.xp) ? Number(parsed.xp) : 0,
-      streak: Number.isFinite(parsed.streak) ? Number(parsed.streak) : 0,
-      lastActiveDay: parsed.lastActiveDay,
-    };
-  } catch {
-    return defaultProgress;
-  }
-}
-
-export function saveProgress(state: ProgressState): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    emitProgressUpdated(state);
-  } catch {
-    // Storage may be unavailable; the app remains usable without persistence.
-  }
-}
-
-export function recordQuizResult(lessonId: string, score: number, total: number): ProgressState {
-  const state = loadProgress();
-  const safeTotal = Math.max(0, total);
-  const safeScore = Math.min(Math.max(0, score), safeTotal);
-  const pct = safeTotal > 0 ? Math.round((safeScore / safeTotal) * 100) : 0;
-  const prev = state.lessons[lessonId] ?? { completed: false, attempts: 0 };
-  const now = new Date().toISOString();
-
-  const updated: ProgressState = {
-    ...state,
-    lessons: {
-      ...state.lessons,
-      [lessonId]: {
-        completed: true,
-        completedAt: prev.completedAt ?? now,
-        bestScore: Math.max(prev.bestScore ?? 0, pct),
-        attempts: prev.attempts + 1,
-        lastQuiz: { lessonId, score: safeScore, total: safeTotal, date: now },
-      },
-    },
-  };
-
-  const isFirstCompletion = !prev.completed;
-  updated.xp = state.xp + (isFirstCompletion ? 10 : 0) + Math.round((pct / 100) * 20);
-
-  const today = todayKey();
-  if (state.lastActiveDay !== today) {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yKey = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
-    updated.streak = state.lastActiveDay === yKey ? state.streak + 1 : 1;
-    updated.lastActiveDay = today;
-  }
-
-  saveProgress(updated);
-  return updated;
-}
-
-export function getLessonProgress(state: ProgressState, lessonId: string): LessonProgress | undefined {
-  return state.lessons[lessonId];
-}
-
-export function stats(state: ProgressState, totalLessons: number) {
-  const completed = Object.values(state.lessons).filter((l) => l.completed);
-  const avgScore =
-    completed.length > 0
-      ? Math.round(completed.reduce((sum, lesson) => sum + (lesson.bestScore ?? 0), 0) / completed.length)
-      : 0;
-  const total = Math.max(0, totalLessons);
-  return {
-    completed: completed.length,
-    total,
-    pct: total > 0 ? Math.min(100, Math.round((completed.length / total) * 100)) : 0,
-    avgScore,
-    xp: state.xp,
-    streak: state.streak,
-  };
-}
-
-export type { ProgressUpdatedEvent };
+export type CardState={box:number;interval:number;due:number;reps:number;lapses:number;ease:number;correct:number;seen:number};
+export type LessonState={completed:boolean;bestScore:number;xp:number;lastStudied:number;cards:Record<string,CardState>};
+export type ProgressState={version:2;xp:number;streak:number;lastActive:string|null;lessons:Record<string,LessonState>};
+const KEY="alifya:progress:v2";
+const empty=():ProgressState=>({version:2,xp:0,streak:0,lastActive:null,lessons:{}});
+export function loadProgress():ProgressState{if(typeof window==="undefined")return empty();try{const raw=window.localStorage.getItem(KEY);if(!raw)return empty();const parsed=JSON.parse(raw);if(parsed?.version!==2)return empty();return parsed as ProgressState;}catch{return empty();}}
+function save(state:ProgressState){window.localStorage.setItem(KEY,JSON.stringify(state));window.dispatchEvent(new Event("alifya:progress-updated"));return state;}
+function today(){return new Date().toISOString().slice(0,10)}
+function dayDiff(a:string,b:string){return Math.round((new Date(b).getTime()-new Date(a).getTime())/86400000)}
+function touch(state:ProgressState){const t=today(); if(state.lastActive!==t){if(state.lastActive&&dayDiff(state.lastActive,t)===1)state.streak+=1;else if(state.lastActive!==t)state.streak=1;state.lastActive=t;} return state;}
+export function recordLessonResult(lessonId:string,score:number,total:number):ProgressState{const s=loadProgress();touch(s);const pct=total?Math.round(score/total*100):0;const old=s.lessons[lessonId]??{completed:false,bestScore:0,xp:0,lastStudied:0,cards:{}};const gain=Math.max(10,score*8)+(pct>=80?15:0);s.lessons[lessonId]={...old,completed:true,bestScore:Math.max(old.bestScore,pct),xp:Math.max(old.xp,gain),lastStudied:Date.now()};s.xp+=gain;return save(s);}
+export function reviewCard(lessonId:string,cardId:string,rating:"again"|"hard"|"good"|"easy",correct:boolean):ProgressState{const s=loadProgress();touch(s);const lesson=s.lessons[lessonId]??{completed:false,bestScore:0,xp:0,lastStudied:0,cards:{}};const old=lesson.cards[cardId]??{box:0,interval:0,due:0,reps:0,lapses:0,ease:2.5,correct:0,seen:0};let interval=old.interval;let box=old.box;let ease=old.ease;
+ if(rating==="again"){box=0;interval=0;ease=Math.max(1.3,ease-0.2);} else {box=Math.min(5,box+1);const mult=rating==="easy"?2.2:rating==="hard"?1.2:1.7;interval=Math.max(1,Math.round((old.interval||1)*mult*ease/2.5));if(rating==="easy")ease=Math.min(3.0,ease+0.15);if(rating==="hard")ease=Math.max(1.3,ease-0.15);}
+ lesson.cards={...lesson.cards,[cardId]:{box,interval,due:Date.now()+interval*86400000,reps:old.reps+1,lapses:old.lapses+(rating==="again"?1:0),ease,correct:old.correct+(correct?1:0),seen:old.seen+1}};lesson.lastStudied=Date.now();s.lessons[lessonId]=lesson;s.xp+=rating==="easy"?6:rating==="good"?4:rating==="hard"?2:1;return save(s);}
+export function stats(s:ProgressState,totalLessons:number){const completed=Object.values(s.lessons).filter(x=>x.completed).length;const scores=Object.values(s.lessons).filter(x=>x.completed).map(x=>x.bestScore);return{completed,total:totalLessons,pct:totalLessons?Math.round(completed/totalLessons*100):0,avgScore:scores.length?Math.round(scores.reduce((a,b)=>a+b,0)/scores.length):0,xp:s.xp,streak:s.streak};}
+export function dueCards(s:ProgressState,lessonId:string){const cards=s.lessons[lessonId]?.cards??{};return Object.entries(cards).filter(([,v])=>v.due<=Date.now()).map(([id])=>id)}
+export function resetProgress(){window.localStorage.removeItem(KEY);window.dispatchEvent(new Event("alifya:progress-updated"));}
