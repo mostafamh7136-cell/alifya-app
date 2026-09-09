@@ -1,4 +1,4 @@
-import type {Metadata,Viewport} from "next"; import "./globals.css"; import ThemeProvider from "@/components/ThemeProvider";
-export const metadata:Metadata={metadataBase:new URL("https://alifya.vercel.app"),title:{default:"أليفا — تعلم العربية",template:"%s · أليفا"},description:"تعلّم العربية بأسلوب تفاعلي: مفردات، استماع، اختبارات ومراجعة ذكية.",alternates:{canonical:"/"},icons:{icon:"/icon.svg"}};
+import type {Metadata,Viewport} from "next";import "./globals.css";import ThemeProvider from "@/components/ThemeProvider";import LanguageProvider from "@/lib/i18n";
+export const metadata:Metadata={metadataBase:new URL("https://alifya.vercel.app"),title:{default:"Alifya — Arabic Language Learning",template:"%s · Alifya"},description:"Learn Arabic through flashcards, listening, review, pronunciation and smart progress.",alternates:{canonical:"/"},icons:{icon:"/icon.svg"}};
 export const viewport:Viewport={width:"device-width",initialScale:1,themeColor:[{media:"(prefers-color-scheme: light)",color:"#faf7ef"},{media:"(prefers-color-scheme: dark)",color:"#121313"}]};
-export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="ar" dir="rtl" suppressHydrationWarning><body><ThemeProvider><div className="app-shell">{children}</div></ThemeProvider></body></html>}
+export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="en" dir="ltr" suppressHydrationWarning><body><LanguageProvider><ThemeProvider><div className="app-shell">{children}</div></ThemeProvider></LanguageProvider></body></html>}
