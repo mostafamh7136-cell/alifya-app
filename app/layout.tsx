@@ -16,24 +16,24 @@ const cairo = Cairo({
 });
 
 export const metadata: Metadata = {
-  title: {
-    default: "Alifya — تعلّم العربية بذكاء",
-    template: "%s · Alifya",
-  },
-  description:
-    "Alifya is a beautiful, interactive Arabic language learning app — lessons, vocabulary, and quizzes with real-world phrases.",
-  keywords: [
-    "Arabic learning",
-    "تعلم العربية",
-    "language app",
-    "Arabic lessons",
-    "Alifya",
-  ],
+  metadataBase: new URL("https://alifya.vercel.app"),
+  title: { default: "Alifya — تعلّم العربية بذكاء", template: "%s · Alifya" },
+  description: "تعلم العربية بطريقة تفاعلية: دروس قصيرة، مفردات عملية، اختبارات فورية، وتتبع تقدّمك خطوة بخطوة.",
+  keywords: ["Arabic learning", "تعلم العربية", "Arabic lessons", "تعليم العربية", "Alifya"],
+  alternates: { canonical: "/" },
+  robots: { index: true, follow: true },
   openGraph: {
     title: "Alifya — تعلّم العربية بذكاء",
-    description:
-      "Interactive Arabic lessons, vocabulary and quizzes — from greetings to bargaining in the souk.",
+    description: "دروس عربية تفاعلية ومفردات واختبارات مع تتبع للتقدم.",
+    url: "https://alifya.vercel.app",
+    siteName: "Alifya",
+    locale: "ar_EG",
     type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Alifya — تعلّم العربية بذكاء",
+    description: "دروس عربية تفاعلية ومفردات واختبارات.",
   },
 };
 
@@ -43,11 +43,7 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ar" dir="rtl" className={`${amiri.variable} ${cairo.variable}`}>
       <body className="font-sans text-ink-800">
