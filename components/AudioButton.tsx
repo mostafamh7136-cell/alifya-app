@@ -26,7 +26,7 @@ async function checkAudioQuality(url: string): Promise<QualityResult> {
     if (!Number.isFinite(duration) || duration < 0.25 || duration > 12) return { ok: false, duration, reason: "Invalid duration" };
     const channel = buffer.getChannelData(0);
     let peak = 0, sum = 0, clipped = 0;
-    for (const x of channel) { const ax = Math.abs(x); peak = Math.max(peak, ax); sum += x; if (ax >= 0.999) clipped++; }
+    for (let i = 0; i < channel.length; i++) { const x = channel[i]; const ax = Math.abs(x); peak = Math.max(peak, ax); sum += x; if (ax >= 0.999) clipped++; }
     const dc = Math.abs(sum / channel.length);
     if (peak < 0.015) return { ok: false, duration, reason: "Near-silent recording" };
     if (clipped / channel.length > 0.01) return { ok: false, duration, reason: "Clipping detected" };
