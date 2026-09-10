@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 
 type Props = { text: string; lang?: "ar" | "en"; label?: string; compact?: boolean };
-type AudioSource = "human-ar" | "unavailable" | "";
+type AudioSource = "human-ar" | "computer-ar" | "unavailable" | "";
 
 const normalize = (text: string) => text.trim().normalize("NFKC").replace(/[\u064B-\u065F\u0670-\u06ED]/g, "").replace(/[.,!?؛،؟!\"'“”‘’]/g, "").replace(/\s+/g, " ");
 
-// Curated recordings only. No browser TTS, no dialect fallback, no runtime Wiktionary lookup.
+// Curated recordings only. They are served through our same-origin proxy to avoid CDN/CORS/rate-limit failures.
 const HUMAN_ARABIC: Record<string, string> = {
   [normalize("مرحباً")]: "https://upload.wikimedia.org/wikipedia/commons/1/1f/LL-Q13955_%28ara%29-Zinou2go-%D9%85%D8%B1%D8%AD%D8%A8%D8%A7.wav",
   [normalize("السلام عليكم")]: "https://upload.wikimedia.org/wikipedia/commons/6/6b/Ar-%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85_%D8%B9%D9%84%D9%8A%D9%83%D9%85.oga",
@@ -26,77 +26,100 @@ const HUMAN_ARABIC: Record<string, string> = {
   [normalize("أين")]: "https://upload.wikimedia.org/wikipedia/commons/1/1b/LL-Q13955_%28ara%29-Zinou2go-%D8%A3%D9%8A%D9%86.wav",
 };
 
-export default function AudioButton({ text, lang = "ar", label, compact = false }: Props) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const requestRef = useRef(0);
+function getHumanSource(text: string, lang: "ar" | "en") {
+  if (lang !== "ar") return "";
+  return HUMAN_ARABIC[normalize(text)] || "";
+}
+
+function speakArabic(text: string) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return false;
+  const synth = window.speechSynthesis;
+  synth.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "ar-SA";
+  utterance.rate = 0.84;
+  utterance.pitch = 1;
+  const voices = synth.getVoices();
+  const arVoice = voices.find((v) => v.lang.toLowerCase().startsWith("ar"));
+  if (arVoice) utterance.voice = arVoice;
+  synth.speak(utterance);
+  return true;
+}
+
+export default function AudioButton({ text, lang = "ar", label = "Play", compact = false }: Props) {
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [busy, setBusy] = useState(false);
   const [source, setSource] = useState<AudioSource>("");
-  const [error, setError] = useState(false);
 
-  useEffect(() => () => {
-    audioRef.current?.pause();
-    audioRef.current?.removeAttribute("src");
+  useEffect(() => {
+    const handler = () => {};
+    window.speechSynthesis?.addEventListener?.("voiceschanged", handler);
+    return () => window.speechSynthesis?.removeEventListener?.("voiceschanged", handler);
   }, []);
 
-  const speak = async () => {
-    if (lang !== "ar") return;
-    const id = ++requestRef.current;
-    const audio = audioRef.current;
-    if (!audio) return;
-    const src = HUMAN_ARABIC[normalize(text)];
+  const human = getHumanSource(text, lang);
 
-    audio.pause();
-    audio.removeAttribute("src");
-    audio.load();
+  const play = async () => {
+    if (busy) return;
     setBusy(true);
-    setError(false);
-    setSource("");
-
-    if (!src) {
-      setSource("unavailable");
-      setBusy(false);
-      return;
-    }
-
+    const audio = audioRef.current;
     try {
-      audio.src = src;
-      audio.preload = "auto";
-      audio.load();
-      await new Promise<void>((resolve, reject) => {
-        const onReady = () => { cleanup(); resolve(); };
-        const onError = () => { cleanup(); reject(new Error("Audio failed to load")); };
-        const cleanup = () => {
-          audio.removeEventListener("canplay", onReady);
-          audio.removeEventListener("error", onError);
-        };
-        audio.addEventListener("canplay", onReady, { once: true });
-        audio.addEventListener("error", onError, { once: true });
-        if (audio.readyState >= 3) onReady();
-      });
-      if (!Number.isFinite(audio.duration) || audio.duration < 0.25) throw new Error("Invalid recording");
-      await audio.play();
-      if (id === requestRef.current) setSource("human-ar");
-    } catch {
-      if (id === requestRef.current) {
+      if (audio && human) {
         audio.pause();
         audio.removeAttribute("src");
         audio.load();
-        setError(true);
-        setSource("unavailable");
+        audio.src = `/api/audio?src=${encodeURIComponent(human)}`;
+        await new Promise<void>((resolve, reject) => {
+          const onReady = () => { cleanup(); resolve(); };
+          const onError = () => { cleanup(); reject(new Error("audio-load")); };
+          const cleanup = () => {
+            audio.removeEventListener("canplay", onReady);
+            audio.removeEventListener("error", onError);
+          };
+          audio.addEventListener("canplay", onReady, { once: true });
+          audio.addEventListener("error", onError, { once: true });
+          audio.load();
+        });
+        if (!Number.isFinite(audio.duration) || audio.duration <= 0) throw new Error("invalid-duration");
+        await audio.play();
+        setSource("human-ar");
+        return;
       }
+      throw new Error("no-human-source");
+    } catch {
+      const spoke = lang === "ar" ? speakArabic(text) : false;
+      setSource(spoke ? "computer-ar" : "unavailable");
+      if (audio) { audio.pause(); audio.removeAttribute("src"); audio.load(); }
     } finally {
-      if (id === requestRef.current) setBusy(false);
+      setBusy(false);
     }
   };
 
-  const title = source === "human-ar" ? "Clear human Arabic recording" : source === "unavailable" ? "No verified clear human Arabic recording available" : "Human Arabic recording";
-  const display = label || "Play pronunciation";
+  const clear = () => {
+    const audio = audioRef.current;
+    audio?.pause();
+    if (audio) { audio.currentTime = 0; audio.removeAttribute("src"); audio.load(); }
+    if (source === "computer-ar") window.speechSynthesis?.cancel();
+    setSource("");
+  };
 
-  return <>
-    <audio ref={audioRef} preload="none" onEnded={() => setBusy(false)} onError={() => { setBusy(false); setError(true); setSource("unavailable"); audioRef.current?.removeAttribute("src"); }} data-audio-language={lang} data-audio-text={text} data-audio-source={source} data-audio-human={source === "human-ar" ? "true" : "false"} aria-hidden="true" />
-    <button type="button" onClick={speak} className={`audio-btn ${compact ? "audio-btn-compact" : ""}`} aria-label={`${display}: ${text}`} aria-pressed={busy} title={title} disabled={busy}>
-      <span aria-hidden="true">{busy ? "◉" : "▶"}</span>
-      {!compact && <span>{busy ? "Playing human Arabic" : error ? "Recording unavailable" : source === "unavailable" ? "MSA recording unavailable" : display}</span>}
-    </button>
-  </>;
+  return (
+    <>
+      <audio ref={audioRef} preload="none" onEnded={() => setBusy(false)} aria-hidden="true" />
+      <button
+        type="button"
+        className={`audio-btn${compact ? " audio-btn-compact" : ""}`}
+        onClick={source ? clear : play}
+        disabled={busy}
+        title={source === "human-ar" ? "Clear human Arabic recording" : source === "computer-ar" ? "Stop computer Arabic pronunciation" : "Play Arabic pronunciation"}
+        data-audio-language={lang}
+        data-audio-text={text}
+        data-audio-source={source}
+        data-audio-human={source === "human-ar" ? "true" : "false"}
+      >
+        <span aria-hidden="true">{busy ? "…" : source ? "■" : "▶"}</span>
+        {busy ? "Loading audio…" : source === "human-ar" ? label : source === "computer-ar" ? "Computer pronunciation" : label}
+      </button>
+    </>
+  );
 }
