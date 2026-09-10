@@ -49,9 +49,13 @@ async function checkAudioQuality(url: string): Promise<QualityResult> {
   } catch { return { ok: false, duration: 0, reason: "Corrupt or undecodable audio" }; }
 }
 
-async function fileIsGeneralArabic(fileHref: string): Promise<boolean> {
+async function fileIsGeneralArabic(fileHref: string, sourceUrl?: string): Promise<boolean> {
   try {
-    const title = decodeURIComponent(fileHref.split("/wiki/")[1] || "");
+    let title = fileHref ? decodeURIComponent(fileHref.split("/wiki/")[1] || "") : "";
+    if (!title && sourceUrl) {
+      const fileName = decodeURIComponent(new URL(sourceUrl).pathname.split("/").pop() || "");
+      if (fileName) title = `File:${fileName}`;
+    }
     if (!title) return false;
     const api = `https://en.wiktionary.org/w/api.php?action=parse&page=${encodeURIComponent(title)}&prop=wikitext&format=json&origin=*`;
     const response = await fetch(api, { cache: "force-cache" });
@@ -83,7 +87,7 @@ async function findHumanArabicAudio(text: string): Promise<string | null> {
       if (!/^https?:\/\/upload\.wikimedia\.org\//i.test(src)) continue;
       const anchor = node.closest("a[href*='/wiki/File:']") || node.parentElement?.closest("a[href*='/wiki/File:']");
       const fileHref = anchor?.getAttribute("href") || "";
-      if (!fileHref || !(await fileIsGeneralArabic(fileHref))) continue;
+      if (!(await fileIsGeneralArabic(fileHref, src))) continue;
       const quality = await checkAudioQuality(src);
       if (!quality.ok) continue;
       try { sessionStorage.setItem(key, src); } catch {}
