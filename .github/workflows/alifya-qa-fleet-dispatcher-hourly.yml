@@ -1,0 +1,20 @@
+name: Alifya QA Fleet Dispatcher — Hourly
+on:
+  schedule:
+    - cron: '43 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fleet-dispatcher-heartbeat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check production homepage
+        run: curl --fail --silent --show-error --location --max-time 30 https://alifya.vercel.app/ -o /tmp/home.html
+      - name: Check production lessons
+        run: curl --fail --silent --show-error --location --max-time 30 https://alifya.vercel.app/lessons -o /tmp/lessons.html
+      - name: Check production health endpoint
+        run: curl --fail --silent --show-error --location --max-time 30 https://alifya.vercel.app/api/health
+      - name: Record dispatcher heartbeat
+        run: echo "Alifya QA Fleet Dispatcher hourly heartbeat: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
