@@ -8,6 +8,12 @@ type QualityResult = { ok: boolean; duration: number; reason?: string };
 
 const normalize = (text: string) => text.trim().normalize("NFKC").replace(/[\u064B-\u065F\u0670-\u06ED]/g, "").replace(/[.,!?؛،؟!\"'“”‘’]/g, "").replace(/\s+/g, " ");
 const DIALECT_WORDS = ["moroccan", "morocco", "darija", "egyptian", "egypt", "levantine", "levant", "jordanian", "jordan", "syrian", "syria", "lebanese", "lebanon", "palestinian", "palestine", "iraqi", "iraq", "gulf arabic", "hijazi", "hejazi", "yemeni", "yemen", "sudanese", "sudan", "libyan", "libya", "tunisian", "tunisia", "algerian", "algeria", "mauritanian", "mauritania"];
+const VERIFIED_HUMAN_AR: Record<string, string> = {
+  [normalize("السلام عليكم")]: "https://upload.wikimedia.org/wikipedia/commons/6/6b/Ar-%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85_%D8%B9%D9%84%D9%8A%D9%83%D9%85.oga",
+  [normalize("وعليكم السلام")]: "https://upload.wikimedia.org/wikipedia/commons/f/f0/Ar-%D9%88%D8%B9%D9%84%D9%8A%D9%83%D9%85_%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85.oga",
+  [normalize("صباح الخير")]: "https://upload.wikimedia.org/wikipedia/commons/e/e2/%E1%B9%A2ab%C4%81%E1%B8%A5_al-kh%C3%A1yr2.ogg",
+};
+
 const cacheKey = (text: string) => `alifya:msa-audio:${normalize(text)}`;
 const qualityKey = (url: string) => `alifya:audio-quality:${url}`;
 
@@ -76,6 +82,11 @@ async function fileIsGeneralArabic(fileHref: string, sourceUrl?: string): Promis
 async function findHumanArabicAudio(text: string): Promise<string | null> {
   const key = cacheKey(text);
   try { const cached = sessionStorage.getItem(key); if (cached === "NONE") return null; if (cached) return cached; } catch {}
+  const verified = VERIFIED_HUMAN_AR[key === cacheKey(text) ? normalize(text) : text];
+  if (verified) {
+    const quality = await checkAudioQuality(verified);
+    if (quality.ok) { try { sessionStorage.setItem(key, verified); } catch {} return verified; }
+  }
   const page = `https://en.wiktionary.org/w/api.php?action=parse&page=${encodeURIComponent(text)}&prop=text&format=json&origin=*`;
   try {
     const response = await fetch(page, { cache: "force-cache" });
