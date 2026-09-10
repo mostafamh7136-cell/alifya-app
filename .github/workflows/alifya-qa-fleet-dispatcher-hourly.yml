@@ -2,7 +2,8 @@ name: Alifya QA Fleet Dispatcher — Hourly
 on:
   schedule:
     - cron: '43 * * * *'
-  workflow_dispatch:
+  repository_dispatch:
+    types: [qa_hourly_dispatcher]
 permissions:
   contents: read
 jobs:
