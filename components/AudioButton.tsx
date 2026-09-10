@@ -4,40 +4,15 @@ import { useEffect, useRef, useState } from "react";
 
 type Props = { text: string; lang?: "ar" | "en"; label?: string; compact?: boolean };
 type AudioSource = "human-ar" | "unavailable" | "";
-
 type QualityResult = { ok: boolean; duration: number; reason?: string };
 
-const normalize = (text: string) =>
-  text
-    .trim()
-    .normalize("NFKC")
-    .replace(/[\u064B-\u065F\u0670-\u06ED]/g, "")
-    .replace(/[.,!?؛،؟!\"'“”‘’]/g, "")
-    .replace(/\s+/g, " ");
-
-const DIALECT_CODES = ["ajp", "arz", "ary", "arq", "acm", "apd", "afb", "avl", "ayh", "ayl", "ayn", "acw", "ssh", "shu", "apc", "ars"];
+const normalize = (text: string) => text.trim().normalize("NFKC").replace(/[\u064B-\u065F\u0670-\u06ED]/g, "").replace(/[.,!?؛،؟!\"'“”‘’]/g, "").replace(/\s+/g, " ");
+const DIALECT_WORDS = ["moroccan", "morocco", "darija", "egyptian", "egypt", "levantine", "levant", "jordanian", "jordan", "syrian", "syria", "lebanese", "lebanon", "palestinian", "palestine", "iraqi", "iraq", "gulf arabic", "hijazi", "hejazi", "yemeni", "yemen", "sudanese", "sudan", "libyan", "libya", "tunisian", "tunisia", "algerian", "algeria", "mauritanian", "mauritania"];
 const cacheKey = (text: string) => `alifya:msa-audio:${normalize(text)}`;
 const qualityKey = (url: string) => `alifya:audio-quality:${url}`;
 
-function isAllowedArabicFilename(url: string) {
-  try {
-    const file = decodeURIComponent(new URL(url).pathname.split("/").pop() || "");
-    const dialect = file.match(/\(([^)]+)\)/)?.[1];
-    if (dialect && DIALECT_CODES.includes(dialect)) return false;
-    // Accept only generic Arabic Lingua Libre recordings. Regional codes are rejected above.
-    if (/^LL-Q\d+\s*\(ara\)-/i.test(file)) return true;
-    return false;
-  } catch {
-    return false;
-  }
-}
-
 async function checkAudioQuality(url: string): Promise<QualityResult> {
-  try {
-    const cached = sessionStorage.getItem(qualityKey(url));
-    if (cached) return JSON.parse(cached);
-  } catch {}
-
+  try { const cached = sessionStorage.getItem(qualityKey(url)); if (cached) return JSON.parse(cached); } catch {}
   try {
     const res = await fetch(url, { mode: "cors", cache: "force-cache" });
     if (!res.ok) return { ok: false, duration: 0, reason: `HTTP ${res.status}` };
@@ -49,30 +24,17 @@ async function checkAudioQuality(url: string): Promise<QualityResult> {
     await ctx.close();
     const duration = buffer.duration;
     if (!Number.isFinite(duration) || duration < 0.25 || duration > 12) return { ok: false, duration, reason: "Invalid duration" };
-
     const channel = buffer.getChannelData(0);
-    let peak = 0;
-    let sum = 0;
-    let clipped = 0;
-    let dc = 0;
-    for (let i = 0; i < channel.length; i++) {
-      const x = channel[i];
-      const ax = Math.abs(x);
-      peak = Math.max(peak, ax);
-      sum += x;
-      if (ax >= 0.999) clipped++;
-    }
-    dc = Math.abs(sum / channel.length);
+    let peak = 0, sum = 0, clipped = 0;
+    for (const x of channel) { const ax = Math.abs(x); peak = Math.max(peak, ax); sum += x; if (ax >= 0.999) clipped++; }
+    const dc = Math.abs(sum / channel.length);
     if (peak < 0.015) return { ok: false, duration, reason: "Near-silent recording" };
     if (clipped / channel.length > 0.01) return { ok: false, duration, reason: "Clipping detected" };
     if (dc > 0.1) return { ok: false, duration, reason: "DC/noise corruption" };
-
-    // Estimate a conservative noise floor from short-frame RMS values.
     const frame = Math.max(256, Math.floor(buffer.sampleRate * 0.02));
     const rms: number[] = [];
     for (let start = 0; start < channel.length; start += frame) {
-      let s = 0;
-      const end = Math.min(channel.length, start + frame);
+      let s = 0; const end = Math.min(channel.length, start + frame);
       for (let i = start; i < end; i++) s += channel[i] * channel[i];
       rms.push(Math.sqrt(s / Math.max(1, end - start)));
     }
@@ -81,23 +43,30 @@ async function checkAudioQuality(url: string): Promise<QualityResult> {
     const signal = rms[Math.floor(rms.length * 0.9)] || 0;
     const snr = noise > 0 ? 20 * Math.log10(signal / noise) : 99;
     if (snr < 7) return { ok: false, duration, reason: "Excessive background noise" };
-
     const result = { ok: true, duration };
     try { sessionStorage.setItem(qualityKey(url), JSON.stringify(result)); } catch {}
     return result;
-  } catch {
-    return { ok: false, duration: 0, reason: "Corrupt or undecodable audio" };
-  }
+  } catch { return { ok: false, duration: 0, reason: "Corrupt or undecodable audio" }; }
+}
+
+async function fileIsGeneralArabic(fileHref: string): Promise<boolean> {
+  try {
+    const title = decodeURIComponent(fileHref.split("/wiki/")[1] || "");
+    if (!title) return false;
+    const api = `https://en.wiktionary.org/w/api.php?action=parse&page=${encodeURIComponent(title)}&prop=wikitext&format=json&origin=*`;
+    const response = await fetch(api, { cache: "force-cache" });
+    if (!response.ok) return false;
+    const data = await response.json();
+    const wikitext = String(data?.parse?.wikitext?.["*"] || "").toLowerCase();
+    if (!wikitext.includes("arabic")) return false;
+    if (DIALECT_WORDS.some((word) => wikitext.includes(word))) return false;
+    return true;
+  } catch { return false; }
 }
 
 async function findHumanArabicAudio(text: string): Promise<string | null> {
   const key = cacheKey(text);
-  try {
-    const cached = sessionStorage.getItem(key);
-    if (cached === "NONE") return null;
-    if (cached) return cached;
-  } catch {}
-
+  try { const cached = sessionStorage.getItem(key); if (cached === "NONE") return null; if (cached) return cached; } catch {}
   const page = `https://en.wiktionary.org/w/api.php?action=parse&page=${encodeURIComponent(text)}&prop=text&format=json&origin=*`;
   try {
     const response = await fetch(page, { cache: "force-cache" });
@@ -106,20 +75,21 @@ async function findHumanArabicAudio(text: string): Promise<string | null> {
     const html = data?.parse?.text?.["*"] || "";
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, "text/html");
-    const candidates = Array.from(doc.querySelectorAll("audio source[src], audio[src]"))
-      .map((node) => (node.getAttribute("src") || "").trim())
-      .filter(Boolean)
-      .map((src) => src.startsWith("//") ? `https:${src}` : src.startsWith("/") ? `https://en.wiktionary.org${src}` : src)
-      .filter(isAllowedArabicFilename);
-
-    for (const src of candidates) {
+    const candidates = Array.from(doc.querySelectorAll("audio source[src], audio[src]"));
+    for (const node of candidates) {
+      const src0 = (node.getAttribute("src") || "").trim();
+      if (!src0) continue;
+      const src = src0.startsWith("//") ? `https:${src0}` : src0.startsWith("/") ? `https://en.wiktionary.org${src0}` : src0;
+      if (!/^https?:\/\/upload\.wikimedia\.org\//i.test(src)) continue;
+      const anchor = node.closest("a[href*='/wiki/File:']") || node.parentElement?.closest("a[href*='/wiki/File:']");
+      const fileHref = anchor?.getAttribute("href") || "";
+      if (!fileHref || !(await fileIsGeneralArabic(fileHref))) continue;
       const quality = await checkAudioQuality(src);
       if (!quality.ok) continue;
       try { sessionStorage.setItem(key, src); } catch {}
       return src;
     }
   } catch {}
-
   try { sessionStorage.setItem(key, "NONE"); } catch {}
   return null;
 }
@@ -138,76 +108,35 @@ export default function AudioButton({ text, lang = "ar", label, compact = false 
     const id = ++requestRef.current;
     const audio = audioRef.current;
     if (!audio) return;
-    audio.pause();
-    audio.removeAttribute("src");
-    audio.load();
-    setBusy(true);
-    setError(false);
-    setSource("");
-
+    audio.pause(); audio.removeAttribute("src"); audio.load();
+    setBusy(true); setError(false); setSource("");
     try {
       const src = await findHumanArabicAudio(text);
       if (id !== requestRef.current) return;
-      if (!src) {
-        setSource("unavailable");
-        setBusy(false);
-        return;
-      }
-      audio.src = src;
-      audio.preload = "auto";
-      audio.load();
+      if (!src) { setSource("unavailable"); setBusy(false); return; }
+      audio.src = src; audio.preload = "auto"; audio.load();
       await new Promise<void>((resolve, reject) => {
         const onReady = () => { cleanup(); resolve(); };
         const onError = () => { cleanup(); reject(new Error("Audio failed to load")); };
         const cleanup = () => { audio.removeEventListener("canplay", onReady); audio.removeEventListener("error", onError); };
-        audio.addEventListener("canplay", onReady, { once: true });
-        audio.addEventListener("error", onError, { once: true });
+        audio.addEventListener("canplay", onReady, { once: true }); audio.addEventListener("error", onError, { once: true });
         if (audio.readyState >= 3) onReady();
       });
       if (!Number.isFinite(audio.duration) || audio.duration < 0.25) throw new Error("Invalid audio");
       await audio.play();
       if (id === requestRef.current) setSource("human-ar");
     } catch {
-      if (id === requestRef.current) {
-        audio.pause();
-        audio.removeAttribute("src");
-        audio.load();
-        setError(true);
-        setSource("unavailable");
-      }
-    } finally {
-      if (id === requestRef.current) setBusy(false);
-    }
+      if (id === requestRef.current) { audio.pause(); audio.removeAttribute("src"); audio.load(); setError(true); setSource("unavailable"); }
+    } finally { if (id === requestRef.current) setBusy(false); }
   };
 
   const title = source === "human-ar" ? "Clear human Arabic recording" : source === "unavailable" ? "No verified clear human Arabic recording available" : "Human Arabic recording";
   const display = label || "Play pronunciation";
-
-  return (
-    <>
-      <audio
-        ref={audioRef}
-        preload="none"
-        onEnded={() => setBusy(false)}
-        onError={() => { setBusy(false); setError(true); setSource("unavailable"); }}
-        data-audio-language={lang}
-        data-audio-text={text}
-        data-audio-source={source}
-        data-audio-human={source === "human-ar" ? "true" : "false"}
-        aria-hidden="true"
-      />
-      <button
-        type="button"
-        onClick={speak}
-        className={`audio-btn ${compact ? "audio-btn-compact" : ""}`}
-        aria-label={`${display}: ${text}`}
-        aria-pressed={busy}
-        title={title}
-        disabled={busy}
-      >
-        <span aria-hidden="true">{busy ? "◉" : "▶"}</span>
-        {!compact && <span>{busy ? "Playing human Arabic" : error ? "Recording unavailable" : source === "unavailable" ? "MSA recording unavailable" : display}</span>}
-      </button>
-    </>
-  );
+  return <>
+    <audio ref={audioRef} preload="none" onEnded={() => setBusy(false)} onError={() => { setBusy(false); setError(true); setSource("unavailable"); }} data-audio-language={lang} data-audio-text={text} data-audio-source={source} data-audio-human={source === "human-ar" ? "true" : "false"} aria-hidden="true" />
+    <button type="button" onClick={speak} className={`audio-btn ${compact ? "audio-btn-compact" : ""}`} aria-label={`${display}: ${text}`} aria-pressed={busy} title={title} disabled={busy}>
+      <span aria-hidden="true">{busy ? "◉" : "▶"}</span>
+      {!compact && <span>{busy ? "Playing human Arabic" : error ? "Recording unavailable" : source === "unavailable" ? "MSA recording unavailable" : display}</span>}
+    </button>
+  </>;
 }
