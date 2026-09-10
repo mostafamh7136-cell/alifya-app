@@ -57,6 +57,11 @@ async function fileIsGeneralArabic(fileHref: string, sourceUrl?: string): Promis
       if (fileName) title = `File:${fileName}`;
     }
     if (!title) return false;
+    const fileName = decodeURIComponent((title.split("File:")[1] || "")).trim();
+    const dialect = fileName.match(/\(([^)]+)\)/)?.[1]?.toLowerCase();
+    if (dialect && DIALECT_WORDS.some((word) => dialect === word)) return false;
+    // Wikimedia's generic Ar-* pronunciation files are categorized as Arabic pronunciation, not a regional dialect.
+    if (/^Ar-/i.test(fileName) || /^LL-Q\d+\s*\(ara\)-/i.test(fileName)) return true;
     const api = `https://en.wiktionary.org/w/api.php?action=parse&page=${encodeURIComponent(title)}&prop=wikitext&format=json&origin=*`;
     const response = await fetch(api, { cache: "force-cache" });
     if (!response.ok) return false;
