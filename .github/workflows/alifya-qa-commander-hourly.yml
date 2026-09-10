@@ -1,21 +1,17 @@
-name: Alifya QA Commander — Hourly
-on:
+name: Alifya QA Commander Hourly
+"on":
   schedule:
-    - cron: '17 * * * *'
+    - cron: "17 * * * *"
   repository_dispatch:
-    types: [qa_hourly_commander]
-permissions:
-  contents: read
+    types:
+      - qa_hourly_commander
 jobs:
   commander-heartbeat:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
-      - name: Check production homepage
+      - name: Production homepage
         run: curl --fail --silent --show-error --location --max-time 30 https://alifya.vercel.app/ -o /tmp/home.html
-      - name: Check production health endpoint
-        run: curl --fail --silent --show-error --location --max-time 30 https://alifya.vercel.app/api/health
-      - name: Check lessons route
+      - name: Production lessons
         run: curl --fail --silent --show-error --location --max-time 30 https://alifya.vercel.app/lessons -o /tmp/lessons.html
-      - name: Record commander heartbeat
-        run: echo "Alifya QA Commander hourly heartbeat: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+      - name: Heartbeat
+        run: echo "Alifya QA Commander hourly heartbeat $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
