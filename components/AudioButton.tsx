@@ -7,8 +7,7 @@ type AudioSource = "human-ar" | "unavailable" | "";
 
 const normalize = (text: string) => text.trim().normalize("NFKC").replace(/[\u064B-\u065F\u0670-\u06ED]/g, "").replace(/[.,!?؛،؟!\"'“”‘’]/g, "").replace(/\s+/g, " ");
 
-// Curated recordings only. Do not fall back to browser speech, dialect sources,
-// runtime Wiktionary discovery, or client-side download/analysis.
+// Curated recordings only. No browser TTS, no dialect fallback, no runtime Wiktionary lookup.
 const HUMAN_ARABIC: Record<string, string> = {
   [normalize("مرحباً")]: "https://upload.wikimedia.org/wikipedia/commons/1/1f/LL-Q13955_%28ara%29-Zinou2go-%D9%85%D8%B1%D8%AD%D8%A8%D8%A7.wav",
   [normalize("السلام عليكم")]: "https://upload.wikimedia.org/wikipedia/commons/6/6b/Ar-%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85_%D8%B9%D9%84%D9%8A%D9%83%D9%85.oga",
@@ -18,13 +17,13 @@ const HUMAN_ARABIC: Record<string, string> = {
   [normalize("ما اسمك")]: "https://upload.wikimedia.org/wikipedia/commons/c/ca/%D9%85%D8%A7_%D8%A7%D8%B3%D9%85%D9%83.ogg",
   [normalize("تشرفنا")]: "https://upload.wikimedia.org/wikipedia/commons/a/a7/Ar-%D8%AA%D8%B4%D8%B1%D9%81%D9%86%D8%A7.oga",
   [normalize("إلى اللقاء")]: "https://upload.wikimedia.org/wikipedia/commons/d/d2/Ar-%D8%A5%D9%84%D9%89_%D8%A7%D9%84%D9%84%D9%82%D8%A7%D8%A1.oga",
-  [normalize("أهلاً وسهلاً!")]: "https://upload.wikimedia.org/wikipedia/commons/1/10/LL-Q13955_%28ara%29-Zinou2go-%D8%A3%D9%87%D9%84%D8%A7_%D9%88%D8%B3%D9%87%D9%84%D8%A7.wav",
-  [normalize("أهلا وسهلا")]: "https://upload.wikimedia.org/wikipedia/commons/1/10/LL-Q13955_%28ara%29-Zinou2go-%D8%A3%D9%87%D9%84%D8%A7_%D9%88%D8%B3%D9%87%D9%84%D8%A7.wav",
+  [normalize("أهلاً وسهلاً!")]: "https://upload.wikimedia.org/wikipedia/commons/1/10/LL-Q13955_%28ara%29-Zinou2go-%D8%A3%D9%87%D9%84%D8%A7-%D9%88%D8%B3%D9%87%D9%84%D8%A7.wav",
+  [normalize("أهلا وسهلا")]: "https://upload.wikimedia.org/wikipedia/commons/1/10/LL-Q13955_%28ara%29-Zinou2go-%D8%A3%D9%87%D9%84%D8%A7-%D9%88%D8%B3%D9%87%D9%84%D8%A7.wav",
   [normalize("صفر")]: "https://upload.wikimedia.org/wikipedia/commons/d/de/Q204-ar.oga",
-  [normalize("نعم")]: "https://upload.wikimedia.org/wikipedia/commons/8/8f/%D9%86%D8%B9%D9%85-Arabic-Yes.ogg",
-  [normalize("لا")]: "https://upload.wikimedia.org/wikipedia/commons/8/8f/%D9%84%D8%A7-Arabic_No.ogg",
-  [normalize("شكراً")]: "https://upload.wikimedia.org/wikipedia/commons/0/0d/Ar-%D8%B4%D9%83%D8%B1%D9%8B%D8%A7.oga",
-  [normalize("أين")]: "https://upload.wikimedia.org/wikipedia/commons/6/6f/LL-Q13955_%28ara%29-Zinou2go-%D8%A3%D9%8A%D9%86.wav",
+  [normalize("نعم")]: "https://upload.wikimedia.org/wikipedia/commons/c/c3/%D9%86%D8%B9%D9%85-Arabic-Yes.ogg",
+  [normalize("لا")]: "https://upload.wikimedia.org/wikipedia/commons/9/9c/%D9%84%D8%A7-Arabic_No.ogg",
+  [normalize("شكراً")]: "https://upload.wikimedia.org/wikipedia/commons/1/1a/Ar-%D8%B4%D9%83%D8%B1%D9%8B%D8%A7.oga",
+  [normalize("أين")]: "https://upload.wikimedia.org/wikipedia/commons/1/1b/LL-Q13955_%28ara%29-Zinou2go-%D8%A3%D9%8A%D9%86.wav",
 };
 
 export default function AudioButton({ text, lang = "ar", label, compact = false }: Props) {
@@ -74,7 +73,6 @@ export default function AudioButton({ text, lang = "ar", label, compact = false 
         audio.addEventListener("error", onError, { once: true });
         if (audio.readyState >= 3) onReady();
       });
-
       if (!Number.isFinite(audio.duration) || audio.duration < 0.25) throw new Error("Invalid recording");
       await audio.play();
       if (id === requestRef.current) setSource("human-ar");
