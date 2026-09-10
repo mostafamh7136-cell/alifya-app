@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 type Props = { text: string; lang?: "ar" | "en"; label?: string; compact?: boolean };
 type AudioSource = "human-msa" | "unavailable" | "";
 
-// Human recordings for formal/standard Arabic. Dialect-labelled recordings are excluded.
+// Curated human recordings for formal/standard Arabic. Explicit dialect recordings are excluded.
 const VERIFIED_MSA_AUDIO: Record<string, string> = {
   "مرحبا": "https://upload.wikimedia.org/wikipedia/commons/1/1f/LL-Q13955_%28ara%29-Zinou2go-%D9%85%D8%B1%D8%AD%D8%A8%D8%A7.wav",
   "السلام عليكم": "https://upload.wikimedia.org/wikipedia/commons/0/07/%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85_%D8%B9%D9%84%D9%8A%D9%83%D9%85.ogg",
@@ -16,6 +16,7 @@ const VERIFIED_MSA_AUDIO: Record<string, string> = {
   "تشرفنا": "https://upload.wikimedia.org/wikipedia/commons/a/a7/Ar-%D8%AA%D8%B4%D8%B1%D9%81%D9%86%D8%A7.oga",
   "إلى اللقاء": "https://upload.wikimedia.org/wikipedia/commons/d/d2/Ar-%D8%A5%D9%84%D9%89_%D8%A7%D9%84%D9%84%D9%82%D8%A7%D8%A1.oga",
   "أهلا وسهلا": "https://upload.wikimedia.org/wikipedia/commons/1/10/LL-Q13955_%28ara%29-Zinou2go-%D8%A3%D9%87%D9%84%D8%A7_%D9%88%D8%B3%D9%87%D9%84%D8%A7.wav",
+  "صفر": "https://upload.wikimedia.org/wikipedia/commons/8/8b/Q204-ar.oga",
 };
 
 const normalize = (text: string) => text.trim().normalize("NFKC").replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, "").replace(/[.,!?؟،؛:…]/g, "");
